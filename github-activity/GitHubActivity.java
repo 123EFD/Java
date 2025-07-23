@@ -53,21 +53,29 @@ public class GitHubActivity {
         int count = 0;
 
         for (String event : events) {
-            String type = extractField(event, "\"type\":\"", "\"");
-            String repo = extractField(event, "\"repo\":\\{\"id\":\\d+,\"name\":\"", "\"");
+    String type = extractField(event, "\"type\":\"", "\"");
+    String repo = extractField(event, "\"repo\":\\{\"id\":\\d+,\"name\":\"", "\"");
 
-            if (type != null && repo != null) {
-                String activity = interpretType(type, repo);
-                if (activity != null) {
-                    System.out.println("- " + activity);
-                    count++;
-                     System.out.println("Event type: " + type + ", Repo: " + repo);
-                }
+    if (type != null && repo != null) {
+        String activity = null;
 
-            }
-
-            if (count >= 10) break; // Show only first 10 activities
+        if (type.equals("PushEvent")) {
+            String commitCountStr = extractField(event, "\"commits\":\\[", "]");
+            int commitCount = commitCountStr == null ? 0 : commitCountStr.split("\\},\\{").length;
+            activity = "Pushed " + commitCount + " commit" + (commitCount > 1 ? "s" : "") + " to " + repo;
+        } else {
+            activity = interpretType(type, repo);
         }
+
+        if (activity != null) {
+            System.out.println("- " + activity);
+            count++;
+        }
+    }
+
+    if (count >= 10) break;
+}
+
 
         if (count == 0) {
             System.out.println("No public activity found.");
