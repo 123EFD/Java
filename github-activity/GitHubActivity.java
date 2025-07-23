@@ -49,14 +49,25 @@ public class GitHubActivity {
     }
 
     private static void displayEvents(String json) {
+    if (!json.startsWith("[")) {
+        System.out.println("Unexpected JSON format.");
+        return;
+    }
+
+    System.out.println("Raw JSON:\n" + json);  // 👈 TEMP: See raw data
+
     String[] events = json.split("\\},\\{");
     int count = 0;
 
     for (String event : events) {
+        System.out.println("DEBUG: Raw event: " + event);  // 👈 TEMP: Check event text
+
         String type = extractField(event, "\"type\":\"", "\"");
         String repo = extractField(event, "\"repo\":\\{\"id\":\\d+,\"name\":\"", "\"");
 
         if (type != null && repo != null) {
+            System.out.println("Event type: " + type + ", repo: " + repo);  // 👈 TEMP: Log what we got
+
             String activity = null;
 
             if (type.equals("PushEvent")) {
@@ -79,6 +90,7 @@ public class GitHubActivity {
         System.out.println("No public activity found.");
     }
 }
+
 
     private static int countCommits(String eventJson) {
     try {
