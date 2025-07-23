@@ -49,39 +49,58 @@ public class GitHubActivity {
     }
 
     private static void displayEvents(String json) {
-        String[] events = json.split("\\},\\{");
-        int count = 0;
+    String[] events = json.split("\\},\\{");
+    int count = 0;
 
-        for (String event : events) {
-    String type = extractField(event, "\"type\":\"", "\"");
-    String repo = extractField(event, "\"repo\":\\{\"id\":\\d+,\"name\":\"", "\"");
+    for (String event : events) {
+        String type = extractField(event, "\"type\":\"", "\"");
+        String repo = extractField(event, "\"repo\":\\{\"id\":\\d+,\"name\":\"", "\"");
 
-    if (type != null && repo != null) {
-        String activity = null;
+        if (type != null && repo != null) {
+            String activity = null;
 
-        if (type.equals("PushEvent")) {
-            String commitCountStr = extractField(event, "\"commits\":\\[", "]");
-            int commitCount = commitCountStr == null ? 0 : commitCountStr.split("\\},\\{").length;
-            activity = "Pushed " + commitCount + " commit" + (commitCount > 1 ? "s" : "") + " to " + repo;
-        } else {
-            activity = interpretType(type, repo);
+            if (type.equals("PushEvent")) {
+                int commits = countCommits(event);
+                activity = "Pushed " + commits + " commit" + (commits == 1 ? "" : "s") + " to " + repo;
+            } else {
+                activity = interpretType(type, repo);
+            }
+
+            if (activity != null) {
+                System.out.println("- " + activity);
+                count++;
+            }
         }
 
-        if (activity != null) {
-            System.out.println("- " + activity);
-            count++;
-        }
+        if (count >= 10) break;
     }
 
-    if (count >= 10) break;
+    if (count == 0) {
+        System.out.println("No public activity found.");
+    }
 }
 
+    private static int countCommits(String eventJson) {
+    try {
+        int start = eventJson.indexOf("\"commits\":[");
+        if (start == -1) return 0;
 
-        if (count == 0) {
-            System.out.println("No public activity found.");
+        int end = eventJson.indexOf("]", start);
+        if (end == -1) return 0;
+
+        String commitsArray = eventJson.substring(start + 11, end); // skip "commits":[
+        if (commitsArray.trim().isEmpty()) return 0;
+
+        // Count how many '{' are in the array to determine number of commits
+        int count = 0;
+        for (int i = 0; i < commitsArray.length(); i++) {
+            if (commitsArray.charAt(i) == '{') count++;
         }
-
+        return count;
+    } catch (Exception e) {
+        return 0;
     }
+}
 
     private static String extractField(String text, String prefix, String suffix) {
         try {
