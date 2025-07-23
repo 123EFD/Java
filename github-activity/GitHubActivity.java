@@ -3,8 +3,6 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
-import java.net.HttpURLConnection;
-
 
 public class GitHubActivity {
     public static void main(String[] args) {
@@ -33,116 +31,103 @@ public class GitHubActivity {
             }
 
             BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-            String inputLine;
             StringBuilder responseJson = new StringBuilder();
+            String inputLine;
 
             while ((inputLine = in.readLine()) != null) {
                 responseJson.append(inputLine);
             }
             in.close();
 
-            String json = responseJson.toString();
-            displayEvents(json);
+            displayEvents(responseJson.toString());
         } catch (Exception e) {
             System.out.println("An error occurred: " + e.getMessage());
         }
     }
 
     private static void displayEvents(String json) {
-    if (!json.startsWith("[")) {
-        System.out.println("Unexpected JSON format.");
-        return;
-    }
-
-    System.out.println("Raw JSON:\n" + json);  // 👈 TEMP: See raw data
-
-    String[] events = json.split("\\},\\{");
-    int count = 0;
-
-    for (String event : events) {
-        System.out.println("DEBUG: Raw event: " + event);  // 👈 TEMP: Check event text
-
-        String type = extractField(event, "\"type\":\"", "\"");
-        String repo = extractField(event, "\"repo\":\\{\"id\":\\d+,\"name\":\"", "\"");
-
-        if (type != null && repo != null) {
-            System.out.println("Event type: " + type + ", repo: " + repo);  // 👈 TEMP: Log what we got
-
-            String activity = null;
-
-            if (type.equals("PushEvent")) {
-                int commits = countCommits(event);
-                activity = "Pushed " + commits + " commit" + (commits == 1 ? "" : "s") + " to " + repo;
-            } else {
-                activity = interpretType(type, repo);
-            }
-
-            if (activity != null) {
-                System.out.println("- " + activity);
-                count++;
-            }
-        }
-
-        if (count >= 10) break;
-    }
-
-    if (count == 0) {
-        System.out.println("No public activity found.");
-    }
-}
-
-
-    private static int countCommits(String eventJson) {
-    try {
-        int start = eventJson.indexOf("\"commits\":[");
-        if (start == -1) return 0;
-
-        int end = eventJson.indexOf("]", start);
-        if (end == -1) return 0;
-
-        String commitsArray = eventJson.substring(start + 11, end); // skip "commits":[
-        if (commitsArray.trim().isEmpty()) return 0;
-
-        // Count how many '{' are in the array to determine number of commits
+        int eventStart = 0;
         int count = 0;
-        for (int i = 0; i < commitsArray.length(); i++) {
-            if (commitsArray.charAt(i) == '{') count++;
-        }
-        return count;
-    } catch (Exception e) {
-        return 0;
-    }
-}
 
-    private static String extractField(String text, String prefix, String suffix) {
+        while ((eventStart = json.indexOf("{", eventStart)) != -1 && count < 10) {
+            int eventEnd = findMatchingBrace(json, eventStart);
+            if (eventEnd == -1) break;
+
+            String eventJson = json.substring(eventStart, eventEnd + 1);
+            String type = extractValue(eventJson, "\"type\":\"", "\"");
+            String repo = extractValue(eventJson, "\"repo\":\\{[^}]*\"name\":\"", "\"");
+
+            if (type != null && repo != null) {
+                String activity = null;
+
+                switch (type) {
+                    case "PushEvent":
+                        int commitCount = countOccurrences(eventJson, "\"sha\":\"");
+                        activity = "Pushed " + commitCount + " commit" + (commitCount == 1 ? "" : "s") + " to " + repo;
+                        break;
+                    case "IssuesEvent":
+                        activity = "Opened a new issue in " + repo;
+                        break;
+                    case "WatchEvent":
+                        activity = "Starred " + repo;
+                        break;
+                    case "ForkEvent":
+                        activity = "Forked " + repo;
+                        break;
+                    case "CreateEvent":
+                        activity = "Created something in " + repo;
+                        break;
+                    case "PullRequestEvent":
+                        activity = "Opened a pull request in " + repo;
+                        break;
+                }
+
+                if (activity != null) {
+                    System.out.println("- " + activity);
+                    count++;
+                }
+            }
+
+            eventStart = eventEnd + 1;
+        }
+
+        if (count == 0) {
+            System.out.println("No public activity found.");
+        }
+    }
+
+    private static int findMatchingBrace(String json, int start) {
+        int depth = 0;
+        for (int i = start; i < json.length(); i++) {
+            if (json.charAt(i) == '{') depth++;
+            else if (json.charAt(i) == '}') depth--;
+
+            if (depth == 0) return i;
+        }
+        return -1; // No matching brace found
+    }
+
+    private static String extractValue(String text, String prefixRegex, String endChar) {
         try {
-            int start = text.indexOf(prefix);
+            int start = text.indexOf(prefixRegex);
             if (start == -1) return null;
-            start += prefix.length();
-            int end = text.indexOf(suffix, start);
-            if (end == -1) return null;
-            return text.substring(start, end);
+            start = text.indexOf(":", start) + 1;
+            int quoteStart = text.indexOf("\"", start) + 1;
+            int quoteEnd = text.indexOf(endChar, quoteStart);
+            if (quoteStart == -1 || quoteEnd == -1) return null;
+            return text.substring(quoteStart, quoteEnd);
         } catch (Exception e) {
             return null;
         }
     }
 
-    private static String interpretType(String type, String repo) {
-        switch (type) {
-            case "PushEvent":
-                return "Pushed commits to " + repo;
-            case "IssuesEvent":
-                return "Opened a new issue in " + repo;
-            case "WatchEvent":
-                return "Starred " + repo;
-            case "CreateEvent":
-                return "Created something in " + repo;
-            case "ForkEvent":
-                return "Forked " + repo;
-            case "PullRequestEvent":
-                return "Opened a pull request in " + repo;
-            default:
-                return null; // Skip other events
+    private static int countOccurrences(String text, String keyword) {
+        int count = 0;
+        int index = 0;
+        while ((index = text.indexOf(keyword, index)) != -1) {
+            count++;
+            index += keyword.length();
         }
+        return count;
     }
 }
